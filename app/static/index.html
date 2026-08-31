@@ -9,14 +9,46 @@
     <header class="topbar">
       <a class="brand" href="/">what needs me<span>.</span></a>
       <div id="accounts" class="accounts" aria-label="Connected accounts"></div>
-      <div class="controls"><div class="segmented"><button data-mode="fused" class="active">Fused</button><button data-mode="split">Split</button></div>
-      <label class="density">Density <select id="density"><option value="zen">Zen</option><option value="compact" selected>Compact</option><option value="dense">Dense</option></select></label></div>
+      <div class="controls">
+        <div class="segmented" role="group" aria-label="View mode">
+          <button data-mode="fused" class="active">Fused</button><button data-mode="split">Split</button>
+        </div>
+        <label class="density">Density <select id="density">
+          <option value="zen">Zen</option><option value="compact" selected>Compact</option><option value="dense">Dense</option>
+        </select></label>
+      </div>
     </header>
-    <section class="intro"><p>Monday, today</p><h1>Your attention, distilled.</h1><span id="status">Loading your priorities…</span></section>
+
+    <section class="intro">
+      <p class="eyebrow" id="today-label">Today</p>
+      <h1>What needs you.</h1>
+      <span id="status">Loading your priorities…</span>
+    </section>
+
     <section id="lanes" class="lanes" aria-live="polite"></section>
-    <section class="pile"><div><p class="eyebrow">THE PILE</p><h2>Nothing needs you here.</h2></div><div id="pile-items" class="pile-items"></div></section>
+
+    <section id="pile" class="pile">
+      <button id="pile-toggle" class="pile-head" aria-expanded="false">
+        <span>
+          <p class="eyebrow">The pile</p>
+          <h2 id="pile-headline">Nothing here needs you</h2>
+        </span>
+        <span id="pile-caret" class="caret">Show breakdown</span>
+      </button>
+      <div id="pile-body" class="pile-body"></div>
+    </section>
   </main>
-  <aside id="drawer" class="drawer" aria-hidden="true"><button id="close-drawer" class="close" aria-label="Close">×</button><p class="eyebrow">THREAD</p><h2 id="thread-title">Loading…</h2><p id="thread-summary" class="thread-summary"></p><p id="thread-change" class="change"></p><div id="thread-messages"></div></aside>
+
+  <div id="scrim" class="scrim"></div>
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <button id="close-drawer" class="close" aria-label="Close">×</button>
+    <p class="eyebrow">Thread</p>
+    <h2 id="thread-title">Loading…</h2>
+    <p id="thread-summary" class="thread-summary"></p>
+    <p id="thread-change" class="change"></p>
+    <div id="thread-messages"></div>
+  </aside>
+
   <script src="/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What Needs Me</title><link rel="stylesheet" href="/style.css">
+</head>
+<body data-density="compact">
+  <main>
+    <header class="topbar">
+      <a class="brand" href="/">what needs me<span>.</span></a>
+      <div id="accounts" class="accounts" aria-label="Connected accounts"></div>
+      <div class="controls"><div class="segmented"><button data-mode="fused" class="active">Fused</button><button data-mode="split">Split</button></div>
+      <label class="density">Density <select id="density"><option value="zen">Zen</option><option value="compact" selected>Compact</option><option value="dense">Dense</option></select></label></div>
+    </header>
+    <section class="intro"><p>Monday, today</p><h1>Your attention, distilled.</h1><span id="status">Loading your priorities…</span></section>
+    <section id="lanes" class="lanes" aria-live="polite"></section>
+    <section class="pile"><div><p class="eyebrow">THE PILE</p><h2>Nothing needs you here.</h2></div><div id="pile-items" class="pile-items"></div></section>
+  </main>
+  <aside id="drawer" class="drawer" aria-hidden="true"><button id="close-drawer" class="close" aria-label="Close">×</button><p class="eyebrow">THREAD</p><h2 id="thread-title">Loading…</h2><p id="thread-summary" class="thread-summary"></p><p id="thread-change" class="change"></p><div id="thread-messages"></div></aside>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+[
+  {"id":"bill","threadId":"t1","from":"Power Co <billing@power.example>","subject":"Invoice due Sep 15","snippet":"Please pay ₹14,000 by Sep 15.","body":"Please pay ₹14,000 by Sep 15.","date":"2026-09-01T09:00:00+00:00","labels":[],"headers":{}},
+  {"id":"approval","threadId":"t2","from":"Manager <manager@example.com>","subject":"Please approve expense","snippet":"Action required: approve by Sep 10","body":"Action required: approve by Sep 10","date":"2026-09-02T09:00:00+00:00","labels":[],"headers":{}},
+  {"id":"newsletter","threadId":"t3","from":"News <news@example.com>","subject":"Weekly roundup","snippet":"Stories","body":"Stories","date":"2026-09-03T09:00:00+00:00","labels":[],"headers":{"list-unsubscribe":"<https://example.com>"}},
+  {"id":"notice","threadId":"t4","from":"no-reply <no-reply@example.com>","subject":"System alert","snippet":"Status updated","body":"Status updated","date":"2026-09-04T09:00:00+00:00","labels":[],"headers":{}}
+]

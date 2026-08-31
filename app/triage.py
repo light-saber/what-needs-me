@@ -24,23 +24,27 @@ def classify(message: dict[str, Any], sender_counts: Counter[str] | None = None)
     sender = message.get("from", "")
     labels = {label.upper() for label in message.get("labels", [])}
     headers = {key.lower(): value for key, value in message.get("headers", {}).items()}
+    if headers.get("list-unsubscribe") or "CATEGORY_PROMOTIONS" in labels:
+        return "newsletter"
+    if AUTOMATED_RE.search(sender):
+        return "notification"
     if re.search(r"\b(invoice|payment|statement|premium|recharge|renewal)\b", text, re.I) and (
-        AMOUNT_RE.search(text) or re.search(r"\b(due|by|before)\b", text, re.I)
+        AMOUNT_RE.search(text) and re.search(r"\b(due|by|before)\b", text, re.I)
     ):
         return "bill_payment"
     if re.search(r"\b(approve|review|sign off|confirm|action required|needs your approval)\b", text, re.I):
         return "approval"
     if re.search(r"\b(booking|flight|hotel|pnr|boarding pass|itinerary|trip)\b", text, re.I):
         return "travel"
-    if headers.get("list-unsubscribe") or "CATEGORY_PROMOTIONS" in labels:
-        return "newsletter"
-    if AUTOMATED_RE.search(sender):
-        return "notification"
     if re.search(r"\b(receipt|order confirmation|payment confirmation|transaction)\b", subject, re.I):
         return "receipt"
     address = parseaddr(sender)[1].lower()
+    display_name = parseaddr(sender)[0].strip()
     count = sender_counts[address] if sender_counts and address else 1
-    if address and not AUTOMATED_RE.search(sender) and count <= 3:
+    name_tokens = display_name.split()
+    likely_human_name = bool(name_tokens) and len(name_tokens) <= 3 and all(token.istitle() for token in name_tokens)
+    looks_bulk = re.search(r"\b(weekly|newsletter|statement|statements|updates|team|support|marketing|alerts?|bank|image|space|corporation|inc)\b", display_name, re.I)
+    if address and likely_human_name and not looks_bulk and not AUTOMATED_RE.search(sender) and count <= 3:
         return "personal"
     return "unknown"
 
@@ -78,7 +82,7 @@ def extract_ask_deadline(message: dict[str, Any], today: date | None = None) -> 
         deadline_ts = datetime.combine(due, datetime.min.time(), tzinfo=timezone.utc).isoformat()
     amount = AMOUNT_RE.search(text)
     action = ACTION_RE.search(text)
-    if amount and (re.search(r"\b(pay|payment|invoice|due)\b", text, re.I)):
+    if amount and re.search(r"\b(pay now|please pay|payment due|invoice due|amount due|due)\b", text, re.I):
         ask = f"Pay {amount.group(0).replace(' ', '')}"
     elif action:
         ask = action.group(1).capitalize()
@@ -124,7 +128,13 @@ def make_cards(messages: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def rank(cards: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     weights = {"bill_payment": 0, "approval": 1, "personal": 2, "travel": 3, "unknown": 4}
-    return sorted(cards, key=lambda card: (weights.get(card["category"], 5), 0 if card.get("deadline_ts") else 1, card.get("date", "")), reverse=False)
+    def sort_key(card: dict[str, Any]) -> tuple[int, int, float]:
+        try:
+            timestamp = datetime.fromisoformat(card.get("date", "").replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            timestamp = 0
+        return (weights.get(card["category"], 5), 0 if card.get("deadline_ts") else 1, -timestamp)
+    return sorted(cards, key=sort_key)
 
 
 def build_pile(messages: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:

@@ -14,6 +14,7 @@ from typing import Any
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.http import BatchHttpRequest
 
 from app.config import google_token_path
 
@@ -97,12 +98,24 @@ def fetch_recent_messages(days: int = 7, cap: int = 200) -> list[dict[str, Any]]
     response = service.users().messages().list(
         userId="me", q=f"in:inbox newer_than:{max(1, days)}d", maxResults=min(max(1, cap), 200)
     ).execute()
-    return [
-        _normalize(
-            service.users().messages().get(userId="me", id=item["id"], format="full").execute(), account_id
-        )
-        for item in response.get("messages", [])
-    ]
+    identifiers = [item["id"] for item in response.get("messages", [])]
+    raw_messages: list[dict[str, Any]] = []
+
+    # Gmail's batch endpoint keeps a 200-message scan practical without
+    # sacrificing full headers/body data or performing any write operation.
+    for offset in range(0, len(identifiers), 100):
+        batch_results: dict[str, dict[str, Any]] = {}
+
+        def received(request_id: str, result: dict[str, Any] | None, error: Exception | None) -> None:
+            if error is None and result is not None:
+                batch_results[request_id] = result
+
+        batch: BatchHttpRequest = service.new_batch_http_request(callback=received)
+        for message_id in identifiers[offset : offset + 100]:
+            batch.add(service.users().messages().get(userId="me", id=message_id, format="full"), request_id=message_id)
+        batch.execute()
+        raw_messages.extend(batch_results[message_id] for message_id in identifiers[offset : offset + 100] if message_id in batch_results)
+    return [_normalize(raw, account_id) for raw in raw_messages]
 
 
 def fetch_thread(thread_id: str) -> dict[str, Any]:

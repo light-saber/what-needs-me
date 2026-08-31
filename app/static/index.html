@@ -44,8 +44,14 @@
     <button id="close-drawer" class="close" aria-label="Close">×</button>
     <p class="eyebrow">Thread</p>
     <h2 id="thread-title">Loading…</h2>
-    <p id="thread-summary" class="thread-summary"></p>
-    <p id="thread-change" class="change"></p>
+    <div class="thread-summary-panel">
+      <p class="panel-label">Summary</p>
+      <p id="thread-summary" class="thread-summary"></p>
+      <div id="thread-change-block" class="change-block" hidden>
+        <p class="panel-label">What changed</p>
+        <p id="thread-change" class="change"></p>
+      </div>
+    </div>
     <div id="thread-messages"></div>
   </aside>
 

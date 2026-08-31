@@ -46,15 +46,21 @@ function renderAccounts(accounts) { $("#accounts").innerHTML = accounts.map(a =>
 
 function deadlineBadge(card) {
   if (!card.deadline_ts) return "";
-  const overdue = new Date(card.deadline_ts).getTime() < Date.now();
+  const deadline = new Date(card.deadline_ts).getTime();
+  const hoursLeft = (deadline - Date.now()) / 3600000;
+  const cls = hoursLeft < 0 ? " overdue" : hoursLeft <= 48 ? " due-soon" : "";
   const label = new Date(card.deadline_ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `<span class="deadline${overdue ? " overdue" : ""}">${esc(label)}</span>`;
+  return `<span class="deadline${cls}">${esc(label)}</span>`;
+}
+
+function metaLine(card) {
+  return `<span class="meta"><span class="meta-sender">${esc(card.sender)}</span><span class="meta-subject">${esc(card.subject)}</span></span>`;
 }
 
 function actionCard(card) {
   return `<button class="card" data-thread="${esc(card.threadId)}">
     <span class="icon">${categoryIcon[card.category] || "·"}</span>
-    <span><span class="headline">${esc(card.ask)}</span><span class="meta">${esc(card.sender)} · ${esc(card.subject)}</span><span class="snippet">${esc(card.snippet)}</span></span>
+    <span><span class="headline">${esc(card.ask)}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
     ${deadlineBadge(card)}
   </button>`;
 }
@@ -62,7 +68,7 @@ function actionCard(card) {
 function fyiCard(card) {
   return `<button class="card fyi" data-thread="${esc(card.threadId)}">
     <span class="icon">${categoryIcon[card.category] || "·"}</span>
-    <span><span class="fyi-eyebrow">FYI</span><span class="headline">${esc(headlineFor(card, "fyi"))}</span><span class="meta">${esc(card.sender)} · ${esc(card.subject)}</span><span class="snippet">${esc(card.snippet)}</span></span>
+    <span><span class="fyi-eyebrow">FYI</span><span class="headline">${esc(headlineFor(card, "fyi"))}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
     ${deadlineBadge(card)}
   </button>`;
 }
@@ -141,13 +147,16 @@ async function showThread(id) {
   drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
   $("#scrim").classList.add("open");
   $("#thread-title").textContent = "Loading thread…";
-  $("#thread-summary").textContent = ""; $("#thread-change").textContent = ""; $("#thread-messages").innerHTML = "";
+  $("#thread-summary").textContent = ""; $("#thread-change").textContent = ""; $("#thread-change-block").hidden = true; $("#thread-messages").innerHTML = "";
   try {
     const thread = await json(`/api/thread/${encodeURIComponent(id)}`);
     $("#thread-title").textContent = thread.messages[0]?.subject || "Thread";
     $("#thread-summary").textContent = decodeEntities(thread.summary);
-    $("#thread-change").textContent = thread.changed_since_last_seen;
-    $("#thread-messages").innerHTML = thread.messages.map(m => `<article class="message"><strong>${esc(m.from)}</strong><time>${esc(new Date(m.date).toLocaleString())}</time><p>${esc(m.snippet)}</p></article>`).join("");
+    if (thread.changed_since_last_seen) {
+      $("#thread-change").textContent = thread.changed_since_last_seen;
+      $("#thread-change-block").hidden = false;
+    }
+    $("#thread-messages").innerHTML = thread.messages.map(m => `<article class="message"><div class="message-head"><strong>${esc(m.from)}</strong><time>${esc(new Date(m.date).toLocaleString())}</time></div><p>${esc(m.snippet)}</p></article>`).join("");
   } catch (e) {
     $("#thread-title").textContent = e.message;
   }

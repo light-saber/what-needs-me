@@ -5,7 +5,20 @@ const decodeEntitiesEl = document.createElement("textarea");
 function decodeEntities(text = "") { decodeEntitiesEl.innerHTML = text; return decodeEntitiesEl.value; }
 const esc = (text = "") => decodeEntities(String(text)).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-const categoryIcon = { bill_payment: "₹", approval: "✓", travel: "✈", personal: "@", receipt: "🧾", unknown: "·" };
+const svg = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+const categoryIcon = {
+  bill_payment: svg('<rect x="2" y="5" width="20" height="14" rx="3"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/>'),
+  approval: svg('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'),
+  travel: svg('<path d="m21 3-7 18-4-7-7-4 18-7ZM10 14 21 3"/>'),
+  personal: svg('<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>'),
+  receipt: svg('<path d="M5 3 8 5l4-2 4 2 3-2v18l-3-2-4 2-4-2-3 2V3ZM9 9h6M9 13h6"/>'),
+  unknown: svg('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/>')
+};
+const infoIcon = svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>');
+const caretIcon = svg('<path d="m6 9 6 6 6-6"/>');
+const emptyState = (text) => `<div class="empty"><span class="icon">${categoryIcon.unknown}</span><p>${esc(text)}</p></div>`;
+let drawerTrigger = null;
+let threadRequest = 0;
 
 // Categories the backend already treats as digest-only noise.
 const QUIET_CATEGORIES = new Set(["newsletter", "notification"]);
@@ -50,7 +63,7 @@ function deadlineBadge(card) {
   const hoursLeft = (deadline - Date.now()) / 3600000;
   const cls = hoursLeft < 0 ? " overdue" : hoursLeft <= 48 ? " due-soon" : "";
   const label = new Date(card.deadline_ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `<span class="deadline${cls}">${esc(label)}</span>`;
+  return `<span class="deadline${cls}">${hoursLeft < 0 ? "Overdue · " : "Due · "}${esc(label)}</span>`;
 }
 
 function metaLine(card) {
@@ -59,16 +72,16 @@ function metaLine(card) {
 
 function actionCard(card) {
   return `<button class="card" data-thread="${esc(card.threadId)}">
-    <span class="icon">${categoryIcon[card.category] || "·"}</span>
-    <span><span class="headline">${esc(card.ask)}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
+    <span class="icon">${categoryIcon[card.category] || categoryIcon.unknown}</span>
+    <span class="card-content"><span class="headline">${esc(card.ask)}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
     ${deadlineBadge(card)}
   </button>`;
 }
 
 function fyiCard(card) {
   return `<button class="card fyi" data-thread="${esc(card.threadId)}">
-    <span class="icon">${categoryIcon[card.category] || "·"}</span>
-    <span><span class="fyi-eyebrow">FYI</span><span class="headline">${esc(headlineFor(card, "fyi"))}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
+    <span class="icon">${categoryIcon[card.category] || categoryIcon.unknown}</span>
+    <span class="card-content"><span class="fyi-eyebrow">${infoIcon} FYI</span><span class="headline">${esc(headlineFor(card, "fyi"))}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
     ${deadlineBadge(card)}
   </button>`;
 }
@@ -91,7 +104,7 @@ function renderTiers(cards) {
   if (action.length) html += `<div class="tier tier-action">${action.map(actionCard).join("")}</div>`;
   if (fyi.length) html += `<div class="tier tier-fyi"><p class="tier-heading">For your information</p>${fyi.map(fyiCard).join("")}</div>`;
   if (quiet.length) html += `<div class="tier tier-quiet"><p class="tier-heading">Also arrived</p><div class="quiet-strip">${quiet.map(quietRow).join("")}</div></div>`;
-  if (!html) html = `<p class="empty">Clear for now — nothing needs you.</p>`;
+  if (!html) html = emptyState("Clear for now. Nothing needs you.");
   return html;
 }
 
@@ -109,7 +122,7 @@ function renderToday(data) {
   state.data = data;
   const lanes = $("#lanes");
   if (!data.cards.length) {
-    lanes.innerHTML = `<p class="empty">Clear for now. Nothing in the inbox needs your attention.</p>`;
+    lanes.innerHTML = emptyState("Clear for now. Nothing needs you.");
   } else if (state.mode === "split") {
     const groups = Object.groupBy(data.cards, c => c.accountId);
     lanes.innerHTML = Object.entries(groups).map(([accountId, cards]) => {
@@ -138,18 +151,25 @@ async function load() {
     renderToday({ ...today, accounts });
   } catch (error) {
     $("#status").textContent = error.message;
-    $("#lanes").innerHTML = `<p class="empty">${esc(error.message)}. Try again shortly.</p>`;
+    $("#lanes").innerHTML = emptyState(`${error.message}. Try again shortly.`);
   }
 }
 
 async function showThread(id) {
+  const request = ++threadRequest;
+  drawerTrigger = document.activeElement;
   const drawer = $("#drawer");
+  drawer.inert = false;
+  $("main").inert = true;
+  document.body.classList.add("drawer-open");
   drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
   $("#scrim").classList.add("open");
+  $("#close-drawer").focus();
   $("#thread-title").textContent = "Loading thread…";
   $("#thread-summary").textContent = ""; $("#thread-change").textContent = ""; $("#thread-change-block").hidden = true; $("#thread-messages").innerHTML = "";
   try {
     const thread = await json(`/api/thread/${encodeURIComponent(id)}`);
+    if (request !== threadRequest) return;
     $("#thread-title").textContent = thread.messages[0]?.subject || "Thread";
     $("#thread-summary").textContent = decodeEntities(thread.summary);
     if (thread.changed_since_last_seen) {
@@ -158,18 +178,27 @@ async function showThread(id) {
     }
     $("#thread-messages").innerHTML = thread.messages.map(m => `<article class="message"><div class="message-head"><strong>${esc(m.from)}</strong><time>${esc(new Date(m.date).toLocaleString())}</time></div><p>${esc(m.snippet)}</p></article>`).join("");
   } catch (e) {
+    if (request !== threadRequest) return;
     $("#thread-title").textContent = e.message;
   }
 }
 
 function closeDrawer() {
+  threadRequest++;
+  $("#drawer").inert = true;
+  $("main").inert = false;
+  document.body.classList.remove("drawer-open");
+  drawerTrigger?.focus();
   $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true");
   $("#scrim").classList.remove("open");
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => button.onclick = () => {
   state.mode = button.dataset.mode;
-  document.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("active", b === button));
+  document.querySelectorAll("[data-mode]").forEach(b => {
+    b.classList.toggle("active", b === button);
+    b.setAttribute("aria-pressed", String(b === button));
+  });
   load();
 });
 $("#density").onchange = e => document.body.dataset.density = e.target.value;
@@ -180,7 +209,16 @@ $("#pile-toggle").onclick = () => {
   const open = pile.dataset.open !== "true";
   pile.dataset.open = String(open);
   $("#pile-toggle").setAttribute("aria-expanded", String(open));
-  $("#pile-caret").textContent = open ? "Hide breakdown" : "Show breakdown";
+  $("#pile-caret").innerHTML = `${open ? "Hide breakdown" : "Show breakdown"}${caretIcon}`;
 };
 
+$("#pile-caret").innerHTML = `Show breakdown${caretIcon}`;
+document.addEventListener("keydown", event => {
+  if (!$("#drawer").classList.contains("open")) return;
+  if (event.key === "Escape") closeDrawer();
+  if (event.key === "Tab") {
+    event.preventDefault();
+    $("#close-drawer").focus();
+  }
+});
 load();

@@ -11,7 +11,7 @@
       <div id="accounts" class="accounts" aria-label="Connected accounts"></div>
       <div class="controls">
         <div class="segmented" role="group" aria-label="View mode">
-          <button data-mode="fused" class="active">Fused</button><button data-mode="split">Split</button>
+          <button data-mode="fused" class="active" aria-pressed="true">Fused</button><button data-mode="split" aria-pressed="false">Split</button>
         </div>
         <label class="density">Density <select id="density">
           <option value="zen">Zen</option><option value="compact" selected>Compact</option><option value="dense">Dense</option>
@@ -22,16 +22,22 @@
     <section class="intro">
       <p class="eyebrow" id="today-label">Today</p>
       <h1>What needs you.</h1>
-      <span id="status">Loading your priorities…</span>
+      <span id="status" role="status">Your priorities, in focus.</span>
     </section>
 
-    <section id="lanes" class="lanes" aria-live="polite"></section>
+    <section id="lanes" class="lanes" aria-live="polite" aria-label="Today’s priorities">
+      <div class="skeletons" role="status"><span class="sr-only">Loading your priorities</span>
+        <div class="skeleton" aria-hidden="true"><i></i><span></span></div>
+        <div class="skeleton" aria-hidden="true"><i></i><span></span></div>
+        <div class="skeleton" aria-hidden="true"><i></i><span></span></div>
+      </div>
+    </section>
 
     <section id="pile" class="pile">
-      <button id="pile-toggle" class="pile-head" aria-expanded="false">
+      <button id="pile-toggle" class="pile-head" aria-expanded="false" aria-controls="pile-body">
         <span>
-          <p class="eyebrow">The pile</p>
-          <h2 id="pile-headline">Nothing here needs you</h2>
+          <span class="eyebrow">The pile</span>
+          <span id="pile-headline" class="pile-title">Nothing here needs you</span>
         </span>
         <span id="pile-caret" class="caret">Show breakdown</span>
       </button>
@@ -40,8 +46,9 @@
   </main>
 
   <div id="scrim" class="scrim"></div>
-  <aside id="drawer" class="drawer" aria-hidden="true">
-    <button id="close-drawer" class="close" aria-label="Close">×</button>
+  <aside aria-label="Thread details">
+  <div id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="thread-title" aria-hidden="true" inert tabindex="-1">
+    <button id="close-drawer" class="close" aria-label="Close thread"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
     <p class="eyebrow">Thread</p>
     <h2 id="thread-title">Loading…</h2>
     <div class="thread-summary-panel">
@@ -53,6 +60,8 @@
       </div>
     </div>
     <div id="thread-messages"></div>
+  </div>
+
   </aside>
 
   <script src="/app.js"></script>

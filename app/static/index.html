@@ -32,8 +32,13 @@
         <div class="skeleton" aria-hidden="true"><i></i><span></span></div>
       </div>
     </section>
+    <button id="show-more" class="secondary-action" hidden></button>
+    <div id="load-error" class="error-state" role="alert" hidden>
+      <p>Could not load your priorities. Check your connection and try again.</p>
+      <button id="retry-load" class="secondary-action">Retry</button>
+    </div>
 
-    <section id="pile" class="pile">
+    <section id="pile" class="pile" hidden>
       <button id="pile-toggle" class="pile-head" aria-expanded="false" aria-controls="pile-body">
         <span>
           <span class="eyebrow">The pile</span>
@@ -42,15 +47,20 @@
         <span id="pile-caret" class="caret">Show breakdown</span>
       </button>
       <div id="pile-body" class="pile-body"></div>
+      <p id="pile-empty" class="pile-empty" hidden>Nothing else came in.</p>
     </section>
   </main>
 
   <div id="scrim" class="scrim"></div>
-  <aside aria-label="Thread details">
   <div id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="thread-title" aria-hidden="true" inert tabindex="-1">
     <button id="close-drawer" class="close" aria-label="Close thread"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
     <p class="eyebrow">Thread</p>
     <h2 id="thread-title">Loading…</h2>
+    <div id="thread-error" class="error-state" role="alert" hidden>
+      <p>Could not load this thread. Check your connection and try again.</p>
+      <button id="retry-thread" class="secondary-action">Retry thread</button>
+    </div>
+    <div id="thread-content">
     <div class="thread-summary-panel">
       <p class="panel-label">Summary</p>
       <p id="thread-summary" class="thread-summary"></p>
@@ -60,9 +70,8 @@
       </div>
     </div>
     <div id="thread-messages"></div>
+    </div>
   </div>
-
-  </aside>
 
   <script src="/app.js"></script>
 </body>

@@ -1,4 +1,4 @@
-const state = { mode: "fused", data: null };
+const state = { mode: "fused", data: null, showAll: false };
 const $ = (selector) => document.querySelector(selector);
 
 const decodeEntitiesEl = document.createElement("textarea");
@@ -16,7 +16,7 @@ const categoryIcon = {
 };
 const infoIcon = svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>');
 const caretIcon = svg('<path d="m6 9 6 6 6-6"/>');
-const emptyState = (text) => `<div class="empty"><span class="icon">${categoryIcon.unknown}</span><p>${esc(text)}</p></div>`;
+const emptyState = (text) => `<div class="empty"><p>${esc(text)}</p></div>`;
 let drawerTrigger = null;
 let threadRequest = 0;
 
@@ -26,17 +26,18 @@ const QUIET_CATEGORIES = new Set(["newsletter", "notification"]);
 const FYI_CATEGORIES = new Set(["travel", "receipt"]);
 const AUTOMATED_SENDER_RE = /no.?reply|do.?not.?reply|notification|alert|security|mailer-daemon/i;
 const SECURITY_SUBJECT_RE = /log ?on|log ?in|sign.?in|otp|verification code|password (changed|reset)/i;
-const GENERIC_ASK_RE = /^(reply|respond)\b/i;
+const GENERIC_ASK_RE = /^(?:read and respond|reply|respond)(?:\s+by\b.*)?$/i;
 
 // Client-side only: decide how loud a card should be. No backend/API contract change —
 // this is a presentation judgment on top of the same `cards` array.
 function tierOf(card) {
   if (QUIET_CATEGORIES.has(card.category)) return "quiet";
-  if (card.category === "unknown" && (
-    AUTOMATED_SENDER_RE.test(card.sender) ||
-    SECURITY_SUBJECT_RE.test(card.subject) ||
-    (GENERIC_ASK_RE.test(card.ask || "") && !card.deadline_ts)
-  )) return "quiet";
+  const automatedSender = AUTOMATED_SENDER_RE.test(card.sender);
+  const securityNotification = automatedSender && SECURITY_SUBJECT_RE.test(card.subject);
+  if (securityNotification) return "quiet";
+  if (card.deadline_ts || card.urgency === "high") return "action";
+  if (automatedSender || SECURITY_SUBJECT_RE.test(card.subject) ||
+    GENERIC_ASK_RE.test((card.ask || "").trim())) return "quiet";
   if (FYI_CATEGORIES.has(card.category)) return "fyi";
   return "action";
 }
@@ -70,10 +71,10 @@ function metaLine(card) {
   return `<span class="meta"><span class="meta-sender">${esc(card.sender)}</span><span class="meta-subject">${esc(card.subject)}</span></span>`;
 }
 
-function actionCard(card) {
+function actionCard(card, rank) {
   return `<button class="card" data-thread="${esc(card.threadId)}">
     <span class="icon">${categoryIcon[card.category] || categoryIcon.unknown}</span>
-    <span class="card-content"><span class="headline">${esc(card.ask)}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
+    <span class="card-content"><span class="rank">Priority ${rank}${card.urgency === "high" ? " · Urgent" : ""}</span><span class="headline">${esc(card.ask)}</span>${metaLine(card)}<span class="snippet">${esc(card.snippet)}</span></span>
     ${deadlineBadge(card)}
   </button>`;
 }
@@ -98,10 +99,11 @@ function bucketize(cards) {
   return buckets;
 }
 
-function renderTiers(cards) {
+function renderTiers(cards, visibleActions) {
   const { action, fyi, quiet } = bucketize(cards);
   let html = "";
-  if (action.length) html += `<div class="tier tier-action">${action.map(actionCard).join("")}</div>`;
+  const visible = action.filter(card => visibleActions.has(card));
+  if (visible.length) html += `<div class="tier tier-action">${visible.map(card => actionCard(card, visibleActions.get(card))).join("")}</div>`;
   if (fyi.length) html += `<div class="tier tier-fyi"><p class="tier-heading">For your information</p>${fyi.map(fyiCard).join("")}</div>`;
   if (quiet.length) html += `<div class="tier tier-quiet"><p class="tier-heading">Also arrived</p><div class="quiet-strip">${quiet.map(quietRow).join("")}</div></div>`;
   if (!html) html = emptyState("Clear for now. Nothing needs you.");
@@ -111,15 +113,26 @@ function renderTiers(cards) {
 function renderPile(pile) {
   const entries = Object.entries(pile.categories || {});
   const total = entries.reduce((sum, [, item]) => sum + item.count, 0);
+  $("#pile").hidden = !state.data.cards.length && !total;
   $("#pile-headline").textContent = total ? `${total} messages filed, nothing needs you` : "Nothing here needs you";
   $("#pile").dataset.hasItems = String(total > 0);
+  $("#pile-toggle").hidden = !total;
+  $("#pile-empty").hidden = Boolean(total);
+  if (!total) {
+    $("#pile").dataset.open = "false";
+    $("#pile-toggle").setAttribute("aria-expanded", "false");
+  }
   $("#pile-body").innerHTML = entries.length
     ? entries.map(([kind, item]) => `<div class="pile-row"><span>${esc(item.count)} ${esc(kind.replace("_", " "))}</span><span class="p-latest">${esc(relativeTime(item.latest))}</span></div>`).join("")
-    : `<p class="empty">Nothing else came in.</p>`;
+    : "";
 }
 
 function renderToday(data) {
   state.data = data;
+  const { action, fyi, quiet } = bucketize(data.cards);
+  const shown = state.showAll ? action : action.slice(0, 3);
+  const visibleActions = new Map(shown.map(card => [card, action.indexOf(card) + 1]));
+  const remaining = action.length - shown.length;
   const lanes = $("#lanes");
   if (!data.cards.length) {
     lanes.innerHTML = emptyState("Clear for now. Nothing needs you.");
@@ -129,42 +142,44 @@ function renderToday(data) {
       const account = (data.accounts || []).find(a => a.id === accountId);
       const label = account ? account.label : accountId;
       const dot = account ? `<i class="dot" style="background:${esc(account.color)}"></i>` : "";
-      return `<section class="lane"><p class="lane-title">${dot}${esc(label)}</p>${renderTiers(cards)}</section>`;
+      return `<section class="lane"><p class="lane-title">${dot}${esc(label)}</p>${renderTiers(cards, visibleActions)}</section>`;
     }).join("");
   } else {
-    lanes.innerHTML = `<section class="lane">${renderTiers(data.cards)}</section>`;
+    lanes.innerHTML = `<section class="lane">${renderTiers(data.cards, visibleActions)}</section>`;
   }
+  $("#show-more").hidden = !remaining;
+  $("#show-more").textContent = `Show ${remaining} more priorit${remaining === 1 ? "y" : "ies"}`;
   document.querySelectorAll("[data-thread]").forEach(el => el.onclick = () => showThread(el.dataset.thread));
   renderPile(data.pile);
 
-  const { action, fyi } = bucketize(data.cards);
   const parts = [];
-  parts.push(action.length ? `${action.length} need you` : "Clear for now");
+  parts.push(action.length ? `${action.length} need you${remaining ? ` · ${shown.length} shown, ${remaining} more` : ""}` : "Clear for now");
   if (fyi.length) parts.push(`${fyi.length} for your info`);
+  if (quiet.length) parts.push(`${quiet.length} also arrived`);
   $("#status").textContent = parts.join(" · ");
 }
 
 async function load() {
+  $("#status").textContent = "Loading your priorities…";
+  $("#load-error").hidden = true;
   try {
     const [accounts, today] = await Promise.all([json("/api/accounts"), json(`/api/today?mode=${state.mode}&days=7`)]);
     renderAccounts(accounts);
     renderToday({ ...today, accounts });
   } catch (error) {
-    $("#status").textContent = error.message;
-    $("#lanes").innerHTML = emptyState(`${error.message}. Try again shortly.`);
+    $("#status").textContent = "Could not load your priorities";
+    $("#lanes").innerHTML = "";
+    $("#show-more").hidden = true;
+    $("#pile").hidden = true;
+    $("#load-error").hidden = false;
   }
 }
 
-async function showThread(id) {
+async function loadThread(id) {
   const request = ++threadRequest;
-  drawerTrigger = document.activeElement;
-  const drawer = $("#drawer");
-  drawer.inert = false;
-  $("main").inert = true;
-  document.body.classList.add("drawer-open");
-  drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
-  $("#scrim").classList.add("open");
-  $("#close-drawer").focus();
+  if (document.activeElement === $("#retry-thread")) $("#close-drawer").focus({ preventScroll: true });
+  $("#thread-error").hidden = true;
+  $("#thread-content").hidden = false;
   $("#thread-title").textContent = "Loading thread…";
   $("#thread-summary").textContent = ""; $("#thread-change").textContent = ""; $("#thread-change-block").hidden = true; $("#thread-messages").innerHTML = "";
   try {
@@ -179,8 +194,27 @@ async function showThread(id) {
     $("#thread-messages").innerHTML = thread.messages.map(m => `<article class="message"><div class="message-head"><strong>${esc(m.from)}</strong><time>${esc(new Date(m.date).toLocaleString())}</time></div><p>${esc(m.snippet)}</p></article>`).join("");
   } catch (e) {
     if (request !== threadRequest) return;
-    $("#thread-title").textContent = e.message;
+    $("#thread-title").textContent = "Thread unavailable";
+    $("#thread-content").hidden = true;
+    $("#thread-error").hidden = false;
   }
+}
+
+function showThread(id) {
+  drawerTrigger = document.activeElement;
+  const drawer = $("#drawer");
+  drawer.dataset.thread = id;
+  drawer.inert = false;
+  $("main").inert = true;
+  document.body.classList.add("drawer-open");
+  drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
+  $("#scrim").classList.add("open");
+  setTimeout(() => {
+    if (drawer.classList.contains("open") && !drawer.contains(document.activeElement)) {
+      $("#close-drawer").focus({ preventScroll: true });
+    }
+  }, 230);
+  loadThread(id);
 }
 
 function closeDrawer() {
@@ -188,13 +222,14 @@ function closeDrawer() {
   $("#drawer").inert = true;
   $("main").inert = false;
   document.body.classList.remove("drawer-open");
-  drawerTrigger?.focus();
   $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true");
   $("#scrim").classList.remove("open");
+  drawerTrigger?.focus();
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => button.onclick = () => {
   state.mode = button.dataset.mode;
+  state.showAll = false;
   document.querySelectorAll("[data-mode]").forEach(b => {
     b.classList.toggle("active", b === button);
     b.setAttribute("aria-pressed", String(b === button));
@@ -203,6 +238,9 @@ document.querySelectorAll("[data-mode]").forEach(button => button.onclick = () =
 });
 $("#density").onchange = e => document.body.dataset.density = e.target.value;
 $("#close-drawer").onclick = closeDrawer;
+$("#retry-load").onclick = load;
+$("#retry-thread").onclick = () => loadThread($("#drawer").dataset.thread);
+$("#show-more").onclick = () => { state.showAll = true; renderToday(state.data); };
 $("#scrim").onclick = closeDrawer;
 $("#pile-toggle").onclick = () => {
   const pile = $("#pile");
@@ -217,8 +255,10 @@ document.addEventListener("keydown", event => {
   if (!$("#drawer").classList.contains("open")) return;
   if (event.key === "Escape") closeDrawer();
   if (event.key === "Tab") {
+    const controls = [...$("#drawer").querySelectorAll("button:not([hidden]):not(:disabled)")].filter(el => !el.closest("[hidden]"));
+    const index = controls.indexOf(document.activeElement);
     event.preventDefault();
-    $("#close-drawer").focus();
+    controls[(index + (event.shiftKey ? controls.length - 1 : 1)) % controls.length].focus();
   }
 });
 load();

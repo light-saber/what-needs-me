@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.gmail_client import fetch_recent_messages, fetch_thread, list_accounts
 from app.summarizer import summarize_thread
+from app.jev_classifier import get_classifier
 from app.triage import build_pile, make_cards
 
 app = FastAPI(title="What Needs Me")
@@ -50,10 +51,16 @@ def today(
                 key = (message.get("from", "").lower(), message.get("subject", "").strip().lower()) if is_promo else (message["id"], "")
                 deduped.setdefault(key, message)
             messages = list(deduped.values())
+        classifier = get_classifier()
+        categories = {
+            message.get("id", ""): category
+            for message in messages
+            if (category := classifier.classify(message))
+        }
         return {
             "date": datetime.now(timezone.utc).date().isoformat(),
-            "cards": make_cards(messages),
-            "pile": {"categories": build_pile(messages)},
+            "cards": make_cards(messages, categories=categories),
+            "pile": {"categories": build_pile(messages, categories=categories)},
         }
     except Exception as error:
         raise _gmail_error(error) from error

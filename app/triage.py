@@ -12,13 +12,30 @@ AMOUNT_RE = re.compile(r"(?:₹\s?\d[\d,]*|\bINR\s?\d[\d,]*|\bRs\.?\s?\d[\d,]*|\
 DATE_RE = re.compile(r"(?:by|due|before|reply by)\s+([A-Z][a-z]+\.?\s+\d{1,2}(?:,?\s+\d{4})?|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)", re.I)
 ACTION_RE = re.compile(r"\b(approve|review|sign off|confirm|action required|needs your approval|reply|respond)\b", re.I)
 AUTOMATED_RE = re.compile(r"no.?reply|do.?not.?reply|notification|alert|mailer-daemon", re.I)
+PROMOTION_RE = re.compile(
+    r"\b(shop|shopping|collection|collect|sale|offer|discount|deal|buy|purchase|"
+    r"festive|diwali|limited.?time|new arrivals?|shop now|explore our)\b", re.I
+)
 
 
 def _text(message: dict[str, Any]) -> str:
     return f"{message.get('subject', '')}\n{message.get('body', message.get('snippet', ''))[:500]}"
 
 
-def classify(message: dict[str, Any], sender_counts: Counter[str] | None = None) -> str:
+def classify(
+    message: dict[str, Any], sender_counts: Counter[str] | None = None, classifier: Any = None
+) -> str:
+    """Use an optional semantic classifier, then deterministic local rules."""
+    if classifier is not None:
+        try:
+            semantic_category = classifier.classify(message)
+            if semantic_category in {
+                "bill_payment", "approval", "travel", "receipt", "personal",
+                "notification", "newsletter", "spam", "unknown",
+            }:
+                return semantic_category
+        except Exception:
+            pass
     text = _text(message)
     subject = message.get("subject", "")
     sender = message.get("from", "")
@@ -26,6 +43,8 @@ def classify(message: dict[str, Any], sender_counts: Counter[str] | None = None)
     headers = {key.lower(): value for key, value in message.get("headers", {}).items()}
     if headers.get("list-unsubscribe") or "CATEGORY_PROMOTIONS" in labels:
         return "newsletter"
+    if PROMOTION_RE.search(text):
+        return "spam"
     if AUTOMATED_RE.search(sender):
         return "notification"
     if re.search(r"\b(invoice|payment|statement|premium|recharge|renewal)\b", text, re.I) and (
@@ -105,14 +124,19 @@ def _urgency(category: str, deadline_ts: str | None) -> str:
     return "low"
 
 
-def make_cards(messages: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def make_cards(
+    messages: Iterable[dict[str, Any]], categories: dict[str, str] | None = None,
+    classifier: Any = None,
+) -> list[dict[str, Any]]:
     messages = list(messages)
     counts = Counter(parseaddr(item.get("from", ""))[1].lower() for item in messages)
     cards = []
     for message in messages:
-        category = classify(message, counts)
+        category = (categories or {}).get(str(message.get("id", ""))) or classify(message, counts, classifier)
         ask, deadline_ts = extract_ask_deadline(message)
-        actionable = category in {"bill_payment", "approval", "travel", "personal"} or ask is not None
+        actionable = category in {"bill_payment", "approval", "travel", "personal"} or (
+            category not in {"spam", "newsletter", "receipt"} and ask is not None
+        )
         if not actionable:
             continue
         cards.append({
@@ -137,14 +161,17 @@ def rank(cards: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(cards, key=sort_key)
 
 
-def build_pile(messages: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def build_pile(
+    messages: Iterable[dict[str, Any]], categories: dict[str, str] | None = None,
+    classifier: Any = None,
+) -> dict[str, dict[str, Any]]:
     messages = list(messages)
     counts = Counter(parseaddr(item.get("from", ""))[1].lower() for item in messages)
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for message in messages:
-        category = classify(message, counts)
+        category = (categories or {}).get(str(message.get("id", ""))) or classify(message, counts, classifier)
         ask, _ = extract_ask_deadline(message)
-        if category in {"newsletter", "receipt", "notification"} or (category == "unknown" and not ask):
+        if category in {"spam", "newsletter", "receipt"} or (category in {"unknown", "notification"} and not ask):
             groups[category].append(message)
     return {
         category: {

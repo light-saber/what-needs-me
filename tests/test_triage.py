@@ -30,3 +30,24 @@ def test_bill_ranks_ahead_of_approval():
 def test_pile_groups_noise():
     pile = build_pile(FIXTURES)
     assert pile["newsletter"]["count"] == 1 and pile["notification"]["count"] == 1
+
+
+def test_actionable_jev_notification_is_card_not_silent_pile():
+    message = {
+        "id": "account-change",
+        "threadId": "account-change-thread",
+        "from": "Account security <security@example.test>",
+        "subject": "Please approve your recovery email change by Oct 30",
+        "snippet": "Approve this account recovery change by Oct 30.",
+        "body": "Please approve your recovery email change by Oct 30.",
+        "date": "2026-10-29T10:00:00+00:00",
+    }
+    categories = {"account-change": "notification"}
+
+    cards = make_cards([message], categories=categories)
+    pile = build_pile([message], categories=categories)
+
+    assert len(cards) == 1
+    assert cards[0]["category"] == "notification"
+    assert cards[0]["deadline_ts"]
+    assert "notification" not in pile

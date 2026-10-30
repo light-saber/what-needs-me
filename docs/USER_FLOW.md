@@ -1,65 +1,21 @@
-# User flow — what-needs-me redesign
+# User flow - What Needs Me
 
-Scope: frontend-only flows against the existing three endpoints
-(`/api/accounts`, `/api/today`, `/api/thread/{id}`). No new actions ship in this
-round — everywhere a future action would slot in is called out and labelled **(later)**.
+Scope: read-only frontend flows using `/api/accounts`, `/api/today`, and `/api/thread/{id}`. The client groups existing card fields; it does not change the API schema.
 
-## Primary flow — Today, fused
+## Today
 
-1. **Open app** → `GET /api/accounts` + `GET /api/today?mode=fused&days=7` fire in
-   parallel. Header shows a loading state; nothing about "N items" is claimed until
-   data lands.
-2. **Today renders as one ranked stack**, split into two visual tiers built from the
-   same `cards` array (no schema change — this is a client-side grouping):
-   - **Needs you** — cards with a real ask (bill/approval/personal, or anything with a
-     genuine deadline and a specific verb). Full visual weight, ask-first.
-   - **For your information** — informational cards (travel confirmations, receipts):
-     visible, calmer accent, framed as FYI not a task.
-   - Notification-flavoured cards (automated senders / generic "Reply" with no real
-     deadline) do **not** get a slot in either tier — they render in a third, quiet
-     "also arrived" strip directly above the pile, small and skimmable but never
-     competing with real asks.
-3. **User reads the top of the stack** — the biggest text on every card is the ask
-   itself; sender/subject is one quiet line underneath; deadline badge (if any) sits
-   at the right.
-4. **Open card** → click anywhere on the card → `GET /api/thread/{threadId}` →
-   drawer slides in with: thread title, one-paragraph summary, a "what changed since
-   you last looked" line, then the message list (from/date/snippet per message).
-5. **Back / next card** — close drawer (× or click-away) returns to the exact stack
-   position. *(later)*: keyboard `j`/`k` or drawer-footer prev/next to move through
-   the stack without returning to the list first.
-6. Where actions would eventually slot in, **(later)**:
-   - Card hover/right edge → archive / dismiss / "not mine" — **(later)**.
-   - Drawer footer → reply / mark handled — **(later)**.
-   - Pile item → bulk-dismiss a category — **(later)**.
+1. The app loads accounts and the Today deck in parallel. It shows a loading state until both requests finish.
+2. The deck preserves the API's order within each tier. Specific asks appear as action cards with numbered priority labels, urgency when supplied, deadline badges, and the original sender and subject. Travel and receipt cards appear as FYI. Automated and generic response mail appears in `Also arrived` with its original subject and sender.
+3. The first three action cards are visible. `Show N more priorities` reveals the remainder. The status counts all action cards, indicates how many are visible, and separately counts FYI and quiet items.
+4. Clicking any card or quiet row opens its read-only thread drawer. The drawer shows the title, summary, change note when present, and recent messages. Escape, Close, or the scrim dismisses it and returns focus to the source card.
+5. A failed initial load shows an error and Retry. A failed thread load keeps the drawer open with its own Retry.
 
-## Split mode
+## Split mode and density
 
-1. **Toggle to Split** → `GET /api/today?mode=split&days=7` (mode swaps in the same
-   request shape; `accountId` on each card already supports this).
-2. **Lanes render per account**, each lane headed by the account chip (identity —
-   colored dot + address) so a multi-account user always knows whose mail they're
-   looking at. Same two/three-tier grouping applies inside each lane.
-3. Rest of the flow (open card → drawer → back) is identical to fused mode.
+Split requests the same Today endpoint with `mode=split` and groups cards by account. The three-card action cap applies across the whole deck and resets on a mode change. Zen, Compact, and Dense adjust card spacing and content while keeping the source sender and subject available. Zen additionally shows a snippet.
 
-## Pile — expand digest → trust-and-ignore path
+## The pile
 
-1. **Pile renders as a standing digest block** below the stack: per-category counts
-   ("47 newsletters", "42 notifications", "23 unknown", "4 receipts" from the live
-   pull) with a one-line framing ("Nothing here needs you — skim if curious").
-2. **Expand** (click the block) reveals the category breakdown with latest-activity
-   timestamp per category — still just `pile.categories`, no new data fetched.
-3. **Trust-and-ignore**: the collapsed state alone is designed to be a complete,
-   confident "I've seen this and it's fine to ignore" signal — expansion is optional,
-   for the curious, not required to trust the count.
-4. *(later)*: click a pile category → filtered read-only list of those messages;
-   bulk actions on a pile category.
+When there are filed messages, the collapsed pile shows their total. Expanding it reveals category counts and latest activity without another request. When there are cards but no filed messages, it shows `Nothing else came in.` When neither cards nor pile entries exist, the deck shows `Clear for now. Nothing needs you.` and omits the pile.
 
-## Empty states
-
-- **No cards, no pile**: "Clear for now — nothing needs you." with no leftover UI
-  chrome (no empty lane headers).
-- **Pile empty, cards present**: pile block collapses to a single quiet line
-  ("Nothing else came in") rather than an empty box.
-- **Fetch error**: existing error surface in the status line, kept as-is functionally,
-  restyled to match the new type scale.
+Archive, dismiss, reply, mark handled, and bulk category actions are future work.

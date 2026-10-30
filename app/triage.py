@@ -135,7 +135,7 @@ def make_cards(
         category = (categories or {}).get(str(message.get("id", ""))) or classify(message, counts, classifier)
         ask, deadline_ts = extract_ask_deadline(message)
         actionable = category in {"bill_payment", "approval", "travel", "personal"} or (
-            category not in {"spam", "newsletter", "notification", "receipt"} and ask is not None
+            category not in {"spam", "newsletter", "receipt"} and ask is not None
         )
         if not actionable:
             continue
@@ -171,7 +171,7 @@ def build_pile(
     for message in messages:
         category = (categories or {}).get(str(message.get("id", ""))) or classify(message, counts, classifier)
         ask, _ = extract_ask_deadline(message)
-        if category in {"spam", "newsletter", "receipt", "notification"} or (category == "unknown" and not ask):
+        if category in {"spam", "newsletter", "receipt"} or (category in {"unknown", "notification"} and not ask):
             groups[category].append(message)
     return {
         category: {
